@@ -70,8 +70,43 @@ public:
     AudioService& GetAudioService() { return audio_service_; }
 
 
-    // --- [新增] 一个公共函数，用来获取灯光控制的 MQTT 客户端 ---
+    // 🆕 获取 MQTT 客户端
     esp_mqtt_client_handle_t GetLampMqttClient() const { return lamp_mqtt_client_; }
+    
+    // 🆕 传感器数据结构
+    struct SensorData {
+        float temperature = 0.0f;
+        float humidity = 0.0f;
+        int light_intensity = 0;
+        bool lamp_on = false;
+        bool smart_plug1_on = false;
+        bool led_on = false;
+        bool beep_on = false;
+        bool has_dht11_data = false;
+        bool has_light_data = false;
+        
+        // 获取光照状态描述
+        std::string GetLightStatus() const {
+            if (light_intensity < 100) return "光照不足";
+            if (light_intensity > 1000) return "光照过强";
+            return "光照正常";
+        }
+        
+        // 获取温度状态
+        std::string GetTempStatus() const {
+            if (temperature > 30.0f) return "温度过高";
+            return "温度正常";
+        }
+        
+        // 获取湿度状态
+        std::string GetHumidStatus() const {
+            if (humidity > 70.0f) return "湿度过高";
+            if (humidity < 30.0f) return "湿度过低";
+            return "湿度正常";
+        }
+    };
+    
+    const SensorData& GetSensorData() const { return sensor_data_; }
 
 private:
     Application();
@@ -88,8 +123,13 @@ private:
     std::string last_error_message_;
     AudioService audio_service_;
 
-     // --- [新增] 灯光控制专用的 MQTT 客户端句柄 ---
+     // 🆕 MQTT 客户端和传感器数据
     esp_mqtt_client_handle_t lamp_mqtt_client_ = nullptr;
+    SensorData sensor_data_;
+    
+    // 🆕 MQTT 事件处理
+    static void LampMqttEventHandler(void* handler_args, esp_event_base_t base,
+                                    int32_t event_id, void* event_data);
 
     bool has_server_time_ = false;
     bool aborted_ = false;

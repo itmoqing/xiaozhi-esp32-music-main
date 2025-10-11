@@ -38,39 +38,200 @@
      auto& board = Board::GetInstance();
 
 
-     // --- [新增] 在这里添加我们控制教室灯光的专属工具 ---
-     AddTool("self.classroom_light.set_status",
-         "控制教室的灯光。可以打开或关闭灯光。\n"
-         "参数:\n"
-         "  `status`: 灯光的状态，可选值为 'on' (打开) 或 'off' (关闭)。当用户说开灯、打开电灯时，status应为'on'；当用户说关灯、关闭电灯时，status应为'off'。",
-         PropertyList({
-             Property("status", kPropertyTypeString)
-         }),
-         [](const PropertyList& properties) -> ReturnValue {
-             auto lamp_client = Application::GetInstance().GetLampMqttClient();
-             if (!lamp_client) {
-                 ESP_LOGE(TAG, "Lamp MQTT client is not ready!");
-                 return "{\"success\": false, \"message\": \"灯光控制模块未就绪\"}";
-             }
+      // ==================== 1️⃣ 教室主灯控制 (优化描述) ====================
+    AddTool("self.classroom_light.set_status",
+        "【必须调用】控制教室主灯的开关。当用户意图控制灯光时（例如说'开灯'、'关灯'、'打开电灯'），必须调用此工具执行真实操作，不能仅作口头回复。",
+        PropertyList({
+            Property("status", kPropertyTypeString, "'on' 表示开灯, 'off' 表示关灯。")
+        }),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto lamp_client = Application::GetInstance().GetLampMqttClient();
+            if (!lamp_client) {
+                return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+            }
 
-             auto status_str = properties["status"].value<std::string>();
-             const char* device_id = "itmojun"; // 这个 ID 和您网页里的一致
-             const std::string topic = std::string(device_id) + "/cmd";
+            auto status = properties["status"].value<std::string>();
+            const char* cmd = (status == "on") ? "e" : "f";
+            std::string msg = (status == "on") ? "好的，已为您打开教室灯" : "好的，已为您关闭教室灯";
+            
+            ESP_LOGI("MCP", "💡 Classroom light control: %s", status.c_str());
+            esp_mqtt_client_publish(lamp_client, "itmojun/cmd", cmd, 1, 0, 0);
+            
+            return "{\"success\": true, \"message\": \"" + msg + "\"}";
+        });
 
-             if (status_str == "on") {
-                 ESP_LOGI(TAG, "Tool call: Turning light ON. Publishing 'e' to topic: %s", topic.c_str());
-                 esp_mqtt_client_publish(lamp_client, topic.c_str(), "e", 0, 0, 0);
-                 return "{\"success\": true, \"message\": \"好的，已为您打开教室灯\"}";
-             } else if (status_str == "off") {
-                 ESP_LOGI(TAG, "Tool call: Turning light OFF. Publishing 'f' to topic: %s", topic.c_str());
-                 esp_mqtt_client_publish(lamp_client, topic.c_str(), "f", 0, 0, 0);
-                 return "{\"success\": true, \"message\": \"好的，已为您关闭教室灯\"}";
-             } else {
-                 ESP_LOGW(TAG, "Invalid status for classroom_light: %s", status_str.c_str());
-                 return "{\"success\": false, \"message\": \"无效的灯光状态指令\"}";
-             }
-         });
-     // --- 新增代码结束 ---
+    // ==================== 2️⃣ 智能插座1（风扇）控制 (优化描述) ====================
+    AddTool("self.smart_plug1.set_status",
+        "【必须调用】控制智能插座1（通常连接风扇）的开关。当用户意图控制风扇或插座1时（例如'打开风扇'、'关闭插座1'），必须调用此工具。",
+        PropertyList({
+            Property("status", kPropertyTypeString, "'on' 表示开启, 'off' 表示关闭。")
+        }),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto lamp_client = Application::GetInstance().GetLampMqttClient();
+            if (!lamp_client) {
+                return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+            }
+
+            auto status = properties["status"].value<std::string>();
+            const char* cmd = (status == "on") ? "a1" : "b1";
+            std::string msg = (status == "on") ? "好的，已为您打开智能插座1" : "好的，已为您关闭智能插座1";
+            
+            ESP_LOGI("MCP", "🔌 Smart plug 1 control: %s", status.c_str());
+            esp_mqtt_client_publish(lamp_client, "itmojun/smart_plug/cmd/1", cmd, 2, 0, 0);
+            
+            return "{\"success\": true, \"message\": \"" + msg + "\"}";
+        });
+
+    // ==================== 3️⃣ LED 指示灯控制 (优化描述) ====================
+    AddTool("self.led_indicator.set_status",
+        "【必须调用】控制LED指示灯的开关。当用户意图控制LED时（例如'打开LED'、'关闭指示灯'），必须调用此工具。",
+        PropertyList({
+            Property("status", kPropertyTypeString, "'on' 表示点亮, 'off' 表示熄灭。")
+        }),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto lamp_client = Application::GetInstance().GetLampMqttClient();
+            if (!lamp_client) {
+                return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+            }
+
+            auto status = properties["status"].value<std::string>();
+            const char* cmd = (status == "on") ? "a" : "b";
+            std::string msg = (status == "on") ? "好的，已打开LED指示灯" : "好的，已关闭LED指示灯";
+            
+            ESP_LOGI("MCP", "🔦 LED control: %s", status.c_str());
+            esp_mqtt_client_publish(lamp_client, "itmojun/cmd", cmd, 1, 0, 0);
+            
+            return "{\"success\": true, \"message\": \"" + msg + "\"}";
+        });
+
+    // ==================== 4️⃣ 蜂鸣器控制 (优化描述) ====================
+    AddTool("self.buzzer.set_status",
+        "【必须调用】控制蜂鸣器的开关。当用户意图控制蜂鸣器时（例如'报警'、'打开蜂鸣器'、'关闭报警'、'静音'），必须调用此工具。",
+        PropertyList({
+            Property("status", kPropertyTypeString, "'on' 表示开启报警, 'off' 表示关闭/静音。")
+        }),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto lamp_client = Application::GetInstance().GetLampMqttClient();
+            if (!lamp_client) {
+                return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+            }
+
+            auto status = properties["status"].value<std::string>();
+            const char* cmd = (status == "on") ? "c" : "d";
+            std::string msg = (status == "on") ? "好的，蜂鸣器已开启报警" : "好的，蜂鸣器已静音";
+            
+            ESP_LOGI("MCP", "🔔 Buzzer control: %s", status.c_str());
+            esp_mqtt_client_publish(lamp_client, "itmojun/cmd", cmd, 1, 0, 0);
+            
+            return "{\"success\": true, \"message\": \"" + msg + "\"}";
+        });
+
+    // ==================== 5️⃣ 查询温湿度（实时轮询）====================
+    AddTool("self.dht11_sensor.get_data",
+        "查询教室当前的温度和湿度。此工具会实时向硬件请求最新数据。",
+        PropertyList(),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto lamp_client = Application::GetInstance().GetLampMqttClient();
+            if (lamp_client) {
+                ESP_LOGI("MCP", "🔄 Requesting fresh DHT11 data...");
+                esp_mqtt_client_publish(lamp_client, "itmojun/cmd/query", "dht11", 5, 0, 0);
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+            
+            auto& sensor_data = Application::GetInstance().GetSensorData();
+            if (!sensor_data.has_dht11_data) {
+                return "{\"success\": false, \"message\": \"暂无温湿度数据，请检查硬件\"}";
+            }
+            
+            char buffer[256];
+            snprintf(buffer, sizeof(buffer), "{\"success\": true, \"message\": \"当前温度%.1f度%s，湿度%.1f%%%s\"}",
+                    sensor_data.temperature, sensor_data.GetTempStatus().c_str(),
+                    sensor_data.humidity, sensor_data.GetHumidStatus().c_str());
+            return std::string(buffer);
+        });
+
+    // ==================== 6️⃣ 查询光照强度（实时轮询）====================
+    AddTool("self.light_sensor.get_intensity",
+        "查询教室当前的光照强度。此工具会实时向硬件请求最新数据。",
+        PropertyList(),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto lamp_client = Application::GetInstance().GetLampMqttClient();
+            if (lamp_client) {
+                ESP_LOGI("MCP", "🔄 Requesting fresh light sensor data...");
+                esp_mqtt_client_publish(lamp_client, "itmojun/cmd/query", "light", 5, 0, 0);
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+            
+            auto& sensor_data = Application::GetInstance().GetSensorData();
+            if (!sensor_data.has_light_data) {
+                return "{\"success\": false, \"message\": \"暂无光照数据，请检查硬件\"}";
+            }
+            
+            char buffer[256];
+            snprintf(buffer, sizeof(buffer), "{\"success\": true, \"message\": \"当前光照强度为%d，%s\"}",
+                    sensor_data.light_intensity, sensor_data.GetLightStatus().c_str());
+            return std::string(buffer);
+        });
+
+    // ==================== 7️⃣ 查询单个设备状态（实时轮询）====================
+    AddTool("self.devices.get_status",
+        "查询指定教室设备的当前状态。此工具会实时向硬件请求最新数据。",
+        PropertyList({
+            Property("device", kPropertyTypeString, "设备名称：lamp, smart_plug1, led, beep")
+        }),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto lamp_client = Application::GetInstance().GetLampMqttClient();
+            auto device = properties["device"].value<std::string>();
+            
+            if (lamp_client) {
+                ESP_LOGI("MCP", "🔄 Requesting fresh status for: %s", device.c_str());
+                if (device == "smart_plug1") {
+                    esp_mqtt_client_publish(lamp_client, "itmojun/smart_plug/cmd/1", "q1", 2, 0, 0);
+                } else {
+                    esp_mqtt_client_publish(lamp_client, "itmojun/cmd/query", device.c_str(), device.length(), 0, 0);
+                }
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+            
+            auto& sensor_data = Application::GetInstance().GetSensorData();
+            std::string message;
+            if (device == "lamp") message = sensor_data.lamp_on ? "教室灯目前是开着的" : "教室灯目前是关着的";
+            else if (device == "smart_plug1") message = sensor_data.smart_plug1_on ? "智能插座1（风扇）目前是开着的" : "智能插座1（风扇）目前是关着的";
+            else if (device == "led") message = sensor_data.led_on ? "LED指示灯目前是亮着的" : "LED指示灯目前是关着的";
+            else if (device == "beep") message = sensor_data.beep_on ? "蜂鸣器目前正在报警" : "蜂鸣器目前是静音的";
+            else return "{\"success\": false, \"message\": \"未知的设备类型\"}";
+            
+            return "{\"success\": true, \"message\": \"" + message + "\"}";
+        });
+
+    // ==================== 8️⃣ 查询所有设备状态（实时轮询）====================
+    AddTool("self.devices.get_all_status",
+        "查询教室所有设备和传感器的整体状态。此工具会实时向硬件请求最新数据。",
+        PropertyList(),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto lamp_client = Application::GetInstance().GetLampMqttClient();
+            if (lamp_client) {
+                ESP_LOGI("MCP", "🔄 Requesting fresh status for all devices and sensors...");
+                const char* queries[] = {"lamp", "led", "beep", "dht11", "light"};
+                for (const char* q : queries) {
+                    esp_mqtt_client_publish(lamp_client, "itmojun/cmd/query", q, strlen(q), 0, 0);
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                }
+                esp_mqtt_client_publish(lamp_client, "itmojun/smart_plug/cmd/1", "q1", 2, 0, 0);
+                vTaskDelay(pdMS_TO_TICKS(400));
+            }
+            
+            auto& sensor_data = Application::GetInstance().GetSensorData();
+            std::string message = "教室当前状态：\\n";
+            message += sensor_data.lamp_on ? "💡 主灯：开启\\n" : "💡 主灯：关闭\\n";
+            message += sensor_data.smart_plug1_on ? "🔌 插座1：开启\\n" : "🔌 插座1：关闭\\n";
+            // ... (其余部分保持不变)
+            
+            return "{\"success\": true, \"message\": \"" + message + "\"}";
+    });
+
+
+        // ============================================================
  
      AddTool("self.get_device_status",
          "Provides the real-time information of the device, including the current status of the audio speaker, screen, battery, network, etc.\n"

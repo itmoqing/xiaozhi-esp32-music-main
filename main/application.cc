@@ -513,30 +513,30 @@ void Application::Start() {
     });
     bool protocol_started = protocol_->Start();
 
-    SetDeviceState(kDeviceStateIdle);
+// ========== 初始化灯光控制 MQTT 客户端 ==========
+ESP_LOGI(TAG, "🚀 Initializing Lamp Control MQTT client...");
+esp_mqtt_client_config_t mqtt_cfg = {};
+mqtt_cfg.broker.address.uri = "ws://itmojun.com:8083/mqtt";
+mqtt_cfg.network.disable_auto_reconnect = false;
 
-
-    // --- [新增] 初始化并启动我们专用于灯光控制的 MQTT 客户端 ---
-    ESP_LOGI(TAG, "Initializing Lamp Control MQTT client...");
-    esp_mqtt_client_config_t mqtt_cfg = {
-        .broker = {
-            .address = {
-                .uri = "ws://itmojun.com:8083/mqtt" // 使用您网页中的服务器地址
-            }
-        }
-    };
-    lamp_mqtt_client_ = esp_mqtt_client_init(&mqtt_cfg);
-    if (lamp_mqtt_client_ == nullptr) {
-        ESP_LOGE(TAG, "Failed to initialize Lamp MQTT client");
+lamp_mqtt_client_ = esp_mqtt_client_init(&mqtt_cfg);
+if (lamp_mqtt_client_ == nullptr) {
+    ESP_LOGE(TAG, "❌ Failed to create Lamp MQTT client");
+} else {
+    // 🔧 关键：注册事件处理器（之前缺少这步！）
+    esp_mqtt_client_register_event(lamp_mqtt_client_, 
+                                  static_cast<esp_mqtt_event_id_t>(ESP_EVENT_ANY_ID),
+                                  LampMqttEventHandler, this);
+    
+    esp_err_t err = esp_mqtt_client_start(lamp_mqtt_client_);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "✅ Lamp MQTT client started successfully");
     } else {
-        esp_err_t err = esp_mqtt_client_start(lamp_mqtt_client_);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to start Lamp MQTT client: %s", esp_err_to_name(err));
-        } else {
-            ESP_LOGI(TAG, "Lamp Control MQTT client started successfully.");
-        }
+        ESP_LOGE(TAG, "❌ Failed to start Lamp MQTT client: %s", esp_err_to_name(err));
     }
-    // --- 新增代码结束 ---
+}
+
+SetDeviceState(kDeviceStateIdle);
 
     has_server_time_ = ota.HasServerTime();
     if (protocol_started) {
@@ -906,4 +906,156 @@ void Application::AddAudioData(AudioStreamPacket&& packet) {
 
 void Application::PlaySound(const std::string_view& sound) {
     audio_service_.PlaySound(sound);
+}
+
+
+
+void Application::LampMqttEventHandler(void* handler_args, esp_event_base_t base,
+                                      int32_t event_id, void* event_data) {
+    auto* app = static_cast<Application*>(handler_args);
+    auto* event = static_cast<esp_mqtt_event_handle_t>(event_data);
+    const char* device_id = "itmojun";
+    
+    switch (event_id) {
+        case MQTT_EVENT_CONNECTED: {
+            ESP_LOGI(TAG, "✅ Lamp MQTT connected! Subscribing to topics...");
+            
+            esp_mqtt_client_subscribe(event->client, 
+                (std::string(device_id) + "/sensor/+").c_str(), 0);
+            ESP_LOGI(TAG, "📡 Subscribed to: %s/sensor/+", device_id);
+            
+            esp_mqtt_client_subscribe(event->client, 
+                (std::string(device_id) + "/state/+").c_str(), 0);
+            ESP_LOGI(TAG, "📡 Subscribed to: %s/state/+", device_id);
+            
+            std::string smart_plug_topic = std::string(device_id) + "/smart_plug/cmd/1";
+            esp_mqtt_client_publish(event->client, smart_plug_topic.c_str(), "q1", 2, 0, 0);
+            break;
+        }
+            
+        case MQTT_EVENT_DATA: {
+            std::string topic(event->topic, event->topic_len);
+            std::string data(event->data, event->data_len);
+            
+            ESP_LOGD(TAG, "📨 Received: %s = %s", topic.c_str(), data.c_str());
+            
+            // ========== 处理温湿度数据 ==========
+            if (topic == std::string(device_id) + "/sensor/dht11") {
+                size_t pos = data.find('_');
+                if (pos != std::string::npos) {
+                    try {
+                        app->sensor_data_.temperature = std::stof(data.substr(0, pos));
+                        app->sensor_data_.humidity = std::stof(data.substr(pos + 1));
+                        app->sensor_data_.has_dht11_data = true;
+                        
+                        static float last_temp = 0;
+                        float temp_diff = app->sensor_data_.temperature - last_temp;
+                        if (temp_diff > 0.5f || temp_diff < -0.5f) {
+                            ESP_LOGI(TAG, "🌡️ Temp: %.1f°C, Humidity: %.1f%%", 
+                                    app->sensor_data_.temperature, 
+                                    app->sensor_data_.humidity);
+                            last_temp = app->sensor_data_.temperature;
+                        }
+                    } catch (...) {
+                        ESP_LOGW(TAG, "Failed to parse DHT11 data");
+                    }
+                }
+            }
+            // ========== 处理光照强度 ==========
+            else if (topic == std::string(device_id) + "/sensor/light") {
+                try {
+                    int raw_value = std::stoi(data);
+                    app->sensor_data_.light_intensity = 4095 - raw_value;
+                    app->sensor_data_.has_light_data = true;
+                    
+                    static int last_light = 0;
+                    int light_diff = app->sensor_data_.light_intensity - last_light;
+                    if (light_diff > 100 || light_diff < -100) {
+                        ESP_LOGI(TAG, "💡 Light: %d", app->sensor_data_.light_intensity);
+                        last_light = app->sensor_data_.light_intensity;
+                    }
+                } catch (...) {
+                    ESP_LOGW(TAG, "Failed to parse light data");
+                }
+            }
+            // ========== 处理设备状态反馈 ==========
+            else if (topic == std::string(device_id) + "/state/lamp") {
+                bool old_state = app->sensor_data_.lamp_on;
+                app->sensor_data_.lamp_on = (data == "1");
+                if (old_state != app->sensor_data_.lamp_on) {
+                    ESP_LOGI(TAG, "💡 Lamp: %s", app->sensor_data_.lamp_on ? "ON" : "OFF");
+                }
+            }
+            else if (topic == std::string(device_id) + "/state/smart_plug_1") {
+                bool old_state = app->sensor_data_.smart_plug1_on;
+                app->sensor_data_.smart_plug1_on = (data == "n1");
+                if (old_state != app->sensor_data_.smart_plug1_on) {
+                    ESP_LOGI(TAG, "🔌 Plug 1: %s", app->sensor_data_.smart_plug1_on ? "ON" : "OFF");
+                }
+            }
+            else if (topic == std::string(device_id) + "/state/led") {
+                bool old_state = app->sensor_data_.led_on;
+                app->sensor_data_.led_on = (data == "1");
+                if (old_state != app->sensor_data_.led_on) {
+                    ESP_LOGI(TAG, "🔦 LED: %s", app->sensor_data_.led_on ? "ON" : "OFF");
+                }
+            }
+            else if (topic == std::string(device_id) + "/state/beep") {
+                bool old_state = app->sensor_data_.beep_on;
+                app->sensor_data_.beep_on = (data == "1");
+                if (old_state != app->sensor_data_.beep_on) {
+                    ESP_LOGI(TAG, "🔔 Beep: %s", app->sensor_data_.beep_on ? "ON" : "OFF");
+                }
+            }
+
+
+             // ========== ⬇️ 把新代码添加到这里 ⬇️ ==========
+    // --- 监听通用控制指令并同步状态 ---
+    else if (topic == std::string(device_id) + "/cmd") {
+        ESP_LOGI(TAG, "📝 Syncing state from /cmd command...");
+        if (data == "e") {
+            app->sensor_data_.lamp_on = true;
+            ESP_LOGI(TAG, "   -> Lamp is now ON");
+        } else if (data == "f") {
+            app->sensor_data_.lamp_on = false;
+            ESP_LOGI(TAG, "   -> Lamp is now OFF");
+        } else if (data == "a") {
+            app->sensor_data_.led_on = true;
+            ESP_LOGI(TAG, "   -> LED is now ON");
+        } else if (data == "b") {
+            app->sensor_data_.led_on = false;
+            ESP_LOGI(TAG, "   -> LED is now OFF");
+        } else if (data == "c") {
+            app->sensor_data_.beep_on = true;
+            ESP_LOGI(TAG, "   -> Beep is now ON");
+        } else if (data == "d") {
+            app->sensor_data_.beep_on = false;
+            ESP_LOGI(TAG, "   -> Beep is now OFF");
+        }
+    }
+
+    // --- 监听智能插座指令并同步状态 ---
+    else if (topic == std::string(device_id) + "/smart_plug/cmd/1") {
+        ESP_LOGI(TAG, "📝 Syncing state from /smart_plug/cmd/1 command...");
+        if (data == "a1") {
+            app->sensor_data_.smart_plug1_on = true;
+            ESP_LOGI(TAG, "   -> Smart Plug 1 is now ON");
+        } else if (data == "b1") {
+            app->sensor_data_.smart_plug1_on = false;
+            ESP_LOGI(TAG, "   -> Smart Plug 1 is now OFF");
+        }
+    }
+    // ========== ⬆️ 新代码添加结束 ⬆️ ==========
+
+
+            break;
+        }
+            
+        case MQTT_EVENT_DISCONNECTED:
+            ESP_LOGW(TAG, "❌ Lamp MQTT disconnected");
+            break;
+            
+        default:
+            break;
+    }
 }
