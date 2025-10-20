@@ -108,6 +108,34 @@ public:
     
     const SensorData& GetSensorData() const { return sensor_data_; }
 
+
+      // 🆕 【新增】小车状态结构体
+    struct CarStatus {
+        bool is_ready = false;          // 小车是否就绪
+        time_t last_update = 0;         // 最后状态更新时间
+        
+        std::string GetStatus() const {
+            return is_ready ? "正常" : "未就绪";
+        }
+        
+        std::string GetDetailedStatus() const {
+            if (is_ready) {
+                return "小车状态正常，可以执行指令";
+            } else {
+                return "小车未就绪，请等待系统初始化";
+            }
+        }
+        
+        // 检查状态是否过期（超过10秒没有更新认为状态失效）
+        bool IsStatusValid() const {
+            return (time(nullptr) - last_update) < 10;
+        }
+    };
+
+    // 🆕 【新增】获取小车状态
+    CarStatus& GetCarStatus() { return car_status_; }
+    const CarStatus& GetCarStatus() const { return car_status_; }
+
 private:
     Application();
     ~Application();
@@ -126,6 +154,8 @@ private:
      // 🆕 MQTT 客户端和传感器数据
     esp_mqtt_client_handle_t lamp_mqtt_client_ = nullptr;
     SensorData sensor_data_;
+    // 🆕 【新增】小车状态成员变量
+    CarStatus car_status_;
     
     // 🆕 MQTT 事件处理
     static void LampMqttEventHandler(void* handler_args, esp_event_base_t base,

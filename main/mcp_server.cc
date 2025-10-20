@@ -230,6 +230,190 @@
             return "{\"success\": true, \"message\": \"" + message + "\"}";
     });
 
+ // ==================== 9️⃣ 智能小车前进控制（持续执行）====================
+AddTool("self.smart_car.forward",
+    "【必须调用】控制智能小车前进。当用户说'前进'、'向前走'、'直走'、'往前开'时，必须调用此工具。小车会一直前进直到收到停止命令。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto lamp_client = Application::GetInstance().GetLampMqttClient();
+        if (!lamp_client) {
+            return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+        }
+
+        ESP_LOGI("MCP", "🚗 Smart car forward: 持续前进");
+        esp_mqtt_client_publish(lamp_client, "itmoqing1/cmd", "e", 1, 0, 0); // 'e' for forward
+        
+        return "{\"success\": true, \"message\": \"好的，小车已开始前进，将持续前进直到收到停止命令\"}";
+    });
+
+// ==================== 🔟 智能小车后退控制（持续执行）====================
+AddTool("self.smart_car.backward", 
+    "【必须调用】控制智能小车后退。当用户说'后退'、'倒车'、'向后走'、'往后开'时，必须调用此工具。小车会一直后退直到收到停止命令。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto lamp_client = Application::GetInstance().GetLampMqttClient();
+        if (!lamp_client) {
+            return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+        }
+
+        ESP_LOGI("MCP", "🚗 Smart car backward: 持续后退");
+        esp_mqtt_client_publish(lamp_client, "itmoqing1/cmd", "b", 1, 0, 0); // 'b' for backward
+        
+        return "{\"success\": true, \"message\": \"好的，小车已开始后退，将持续后退直到收到停止命令\"}";
+    });
+
+// ==================== 1️⃣1️⃣ 智能小车原地左转控制（持续执行）====================
+AddTool("self.smart_car.spin_left", // 更新工具名为 spin_left
+    "【必须调用】控制智能小车原地左转。当用户说'原地左转'、'小车原地左转'、'左侧旋转'、'车左转一下'时，必须调用此工具。小车会一直原地左转直到收到停止命令。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto lamp_client = Application::GetInstance().GetLampMqttClient();
+        if (!lamp_client) {
+            return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+        }
+
+        ESP_LOGI("MCP", "🚗 Smart car spin left: 持续原地左转");
+        esp_mqtt_client_publish(lamp_client, "itmoqing1/cmd", "l", 1, 0, 0); // 'l' for spin left
+        
+        return "{\"success\": true, \"message\": \"好的，小车已开始原地左转，将持续原地左转直到收到停止命令\"}";
+    });
+
+// ==================== 1️⃣2️⃣ 智能小车原地右转控制（持续执行）====================
+AddTool("self.smart_car.spin_right", // 更新工具名为 spin_right
+    "【必须调用】控制智能小车原地右转。当用户说'原地右转'、'小车原地右转'、'右侧旋转'、'车右转一下'时，必须调用此工具。小车会一直原地右转直到收到停止命令。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto lamp_client = Application::GetInstance().GetLampMqttClient();
+        if (!lamp_client) {
+            return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+        }
+
+        ESP_LOGI("MCP", "🚗 Smart car spin right: 持续原地右转");
+        esp_mqtt_client_publish(lamp_client, "itmoqing1/cmd", "r", 1, 0, 0); // 'r' for spin right
+        
+        return "{\"success\": true, \"message\": \"好的，小车已开始原地右转，将持续原地右转直到收到停止命令\"}";
+    });
+
+// ==================== 1️⃣3️⃣ 智能小车丝滑左转控制（持续执行）====================
+AddTool("self.smart_car.smooth_turn_left",
+    "【必须调用】控制智能小车以大半径（丝滑）方式向左转弯。当用户说'丝滑左转'、'缓慢左转'、'大弯左转'、'小车大半径左转'时，必须调用此工具。小车会一直丝滑左转直到收到停止命令。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto lamp_client = Application::GetInstance().GetLampMqttClient();
+        if (!lamp_client) {
+            return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+        }
+
+        ESP_LOGI("MCP", "🚗 Smart car smooth turn left: 持续丝滑左转");
+        esp_mqtt_client_publish(lamp_client, "itmoqing1/cmd", "L", 1, 0, 0); // 'L' for smooth turn left
+        
+        return "{\"success\": true, \"message\": \"好的，小车已开始丝滑左转，将持续丝滑左转直到收到停止命令\"}";
+    });
+
+// ==================== 1️⃣4️⃣ 智能小车丝滑右转控制（持续执行）====================
+AddTool("self.smart_car.smooth_turn_right",
+    "【必须调用】控制智能小车以大半径（丝滑）方式向右转弯。当用户说'丝滑右转'、'缓慢右转'、'大弯右转'、'小车大半径右转'时，必须调用此工具。小车会一直丝滑右转直到收到停止命令。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto lamp_client = Application::GetInstance().GetLampMqttClient();
+        if (!lamp_client) {
+            return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+        }
+
+        ESP_LOGI("MCP", "🚗 Smart car smooth turn right: 持续丝滑右转");
+        esp_mqtt_client_publish(lamp_client, "itmoqing1/cmd", "R", 1, 0, 0); // 'R' for smooth turn right
+        
+        return "{\"success\": true, \"message\": \"好的，小车已开始丝滑右转，将持续丝滑右转直到收到停止命令\"}";
+    });
+
+// ==================== 1️⃣5️⃣ 智能小车急促左转控制（持续执行）====================
+AddTool("self.smart_car.sharp_turn_left",
+    "【必须调用】控制智能小车以小半径（急促）方式向左转弯。当用户说'急促左转'、'快速左转'、'小车急左转'、'小车小半径左转'时，必须调用此工具。小车会一直急促左转直到收到停止命令。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto lamp_client = Application::GetInstance().GetLampMqttClient();
+        if (!lamp_client) {
+            return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+        }
+
+        ESP_LOGI("MCP", "🚗 Smart car sharp turn left: 持续急促左转");
+        esp_mqtt_client_publish(lamp_client, "itmoqing1/cmd", "a", 1, 0, 0); // 'a' for sharp turn left
+        
+        return "{\"success\": true, \"message\": \"好的，小车已开始急促左转，将持续急促左转直到收到停止命令\"}";
+    });
+
+// ==================== 1️⃣6️⃣ 智能小车急促右转控制（持续执行）====================
+AddTool("self.smart_car.sharp_turn_right",
+    "【必须调用】控制智能小车以小半径（急促）方式向右转弯。当用户说'急促右转'、'快速右转'、'小车急右转'、'小车小半径右转'时，必须调用此工具。小车会一直急促右转直到收到停止命令。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto lamp_client = Application::GetInstance().GetLampMqttClient();
+        if (!lamp_client) {
+            return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+        }
+
+        ESP_LOGI("MCP", "🚗 Smart car sharp turn right: 持续急促右转");
+        esp_mqtt_client_publish(lamp_client, "itmoqing1/cmd", "d", 1, 0, 0); // 'd' for sharp turn right
+        
+        return "{\"success\": true, \"message\": \"好的，小车已开始急促右转，将持续急促右转直到收到停止命令\"}";
+    });
+
+
+// ==================== 1️⃣7️⃣ 智能小车停止控制 ====================
+AddTool("self.smart_car.stop",
+    "【必须调用】控制智能小车停止。当用户说'停止'、'停车'、'停下'、'别动'、'别跑了'时，必须调用此工具。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto lamp_client = Application::GetInstance().GetLampMqttClient();
+        if (!lamp_client) {
+            return "{\"success\": false, \"message\": \"MQTT客户端未就绪\"}";
+        }
+
+        ESP_LOGI("MCP", "🚗 Smart car stop");
+        esp_mqtt_client_publish(lamp_client, "itmoqing1/cmd", "s", 1, 0, 0); // 's' for stop
+        
+        return "{\"success\": true, \"message\": \"好的，小车已停止\"}";
+    });
+
+
+// ==================== 1️⃣8️⃣ 查询小车状态 ====================
+AddTool("self.smart_car.get_status",
+    "查询智能小车的当前状态。当用户询问'小车状态'、'车准备好了吗'、'车能开吗'时使用。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto& car_status = Application::GetInstance().GetCarStatus();
+        
+        // 检查状态是否有效
+        if (!car_status.IsStatusValid()) {
+            return "{\"success\": false, \"status\": \"未知\", \"message\": \"小车状态信息已过期，请稍后重试\"}";
+        }
+        
+        std::string status = car_status.GetStatus();
+        std::string message = car_status.GetDetailedStatus();
+        
+        return "{\"success\": true, \"status\": \"" + status + "\", \"message\": \"" + message + "\"}";
+    });
+
+// ==================== 1️⃣9️⃣ 检查小车是否就绪 ====================
+AddTool("self.smart_car.check_ready",
+    "检查智能小车是否就绪可以操作。在控制小车移动前建议调用此工具确认状态。",
+    PropertyList(),
+    [](const PropertyList& properties) -> ReturnValue {
+        auto& car_status = Application::GetInstance().GetCarStatus();
+        
+        if (!car_status.IsStatusValid()) {
+            return "{\"success\": false, \"ready\": false, \"message\": \"小车状态信息已过期，无法确定是否就绪\"}";
+        }
+        
+        if (car_status.is_ready) {
+            return "{\"success\": true, \"ready\": true, \"message\": \"小车已就绪，可以正常操作\"}";
+        } else {
+            return "{\"success\": false, \"ready\": false, \"message\": \"小车未就绪，请等待系统初始化完成\"}";
+        }
+    });
+
+
+
 
         // ============================================================
  
