@@ -927,7 +927,12 @@ void Application::LampMqttEventHandler(void* handler_args, esp_event_base_t base
             esp_mqtt_client_subscribe(event->client, 
                 (std::string(device_id) + "/state/+").c_str(), 0);
             ESP_LOGI(TAG, "📡 Subscribed to: %s/state/+", device_id);
-            
+      
+
+            // 🔧 新增：订阅小车传感器主题
+            esp_mqtt_client_subscribe(event->client, "itmoqing1/sensor/+", 0);
+            ESP_LOGI(TAG, "📡 Subscribed to: itmoqing1/sensor/+");
+    
             std::string smart_plug_topic = std::string(device_id) + "/smart_plug/cmd/1";
             esp_mqtt_client_publish(event->client, smart_plug_topic.c_str(), "q1", 2, 0, 0);
             break;
@@ -1008,6 +1013,42 @@ void Application::LampMqttEventHandler(void* handler_args, esp_event_base_t base
                 }
             }
 
+
+            else if (topic.find("itmoqing1/sensor/") == 0) {
+    std::string data(event->data, event->data_len);
+    ESP_LOGI(TAG, "🚗 Car sensor data: %s = %s", topic.c_str(), data.c_str());
+    
+    // 处理小车光照传感器数据来判断状态
+    if (topic == "itmoqing1/sensor/light") {
+        bool is_ready = true;
+        
+        // 检查是否包含waiting关键词
+        std::string data_lower = data;
+        std::transform(data_lower.begin(), data_lower.end(), data_lower.begin(), ::tolower);
+        
+        if (data_lower.find("waiting") != std::string::npos) {
+            is_ready = false;
+            ESP_LOGI(TAG, "🚗 Car status: 未就绪 (waiting)");
+        } else {
+            // 尝试解析数值，成功说明就绪
+            try {
+                size_t space_pos = data.find(' ');
+                if (space_pos != std::string::npos) {
+                    std::stof(data.substr(space_pos + 1));
+                } else {
+                    std::stof(data);
+                }
+                ESP_LOGI(TAG, "🚗 Car status: 正常");
+            } catch (const std::exception& e) {
+                is_ready = false;
+                ESP_LOGI(TAG, "🚗 Car status: 未就绪 (数据异常)");
+            }
+        }
+        
+        app->car_status_.is_ready = is_ready;
+        app->car_status_.last_update = time(nullptr);
+    }
+}
 
              // ========== ⬇️ 把新代码添加到这里 ⬇️ ==========
     // --- 监听通用控制指令并同步状态 ---
